@@ -1,0 +1,257 @@
+
+#user  nobody;				//注释
+worker_processes  1;		//工作进程数目：1个
+
+#error_log  logs/error.log;
+#error_log  logs/error.log  notice;
+error_log  logs/error.log  error;		//error日志的设置  logs/error.log为存放error日志的文件 error为日志的输出级别
+
+#pid        logs/nginx.pid; 			//保存master进程ID的PID文件存放路径
+
+//一个工作进程可以连接的连接数
+events {
+	worker_connections  1024;
+}
+
+//http块模块配置
+http {
+	include       mime.types;		//把 mime.types配置文件嵌入到当前的nginx.conf文件中
+/*	
+application/octet-stream
+1、只能提交二进制，而且只能提交一个二进制，如果提交文件的话，只能提交一个文件,后台接收参数只能有一个，而且只能是流（或者字节数组）
+2、属于HTTP规范中Content-Type的一种
+3、很少使用
+*/
+	default_type  application/octet-stream;		//这个类型主要是用来下载使用,或者未知类型
+	
+//下面为在配置中使用变量
+	#log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+	#                  '$status $body_bytes_sent "$http_referer" '
+	#                  '"$http_user_agent" "$http_x_forwarded_for"';
+	#access_log  /tmp/access.log  main;
+/*
+Nginx高级篇sendfile配置 
+sendfile: 设置为on表示启动高效传输文件的模式。sendfile可以让Nginx在传输文件时直接在磁盘
+和tcp socket之间传输数据。如果这个参数不开启，会先在用户空间（Nginx进程空间）申请一个buffer，
+用read函数把数据从磁盘读到cache，再从cache读取到用户空间的buffer，再用write函数把数据从用户
+空间的buffer写入到内核的buffer，最后到tcp socket。开启这个参数后可以让数据不用经过用户buffer。
+*/
+	sendfile        on;
+	#tcp_nopush     on;
+	#access_log		off;
+
+	#keepalive_timeout  0;
+//keepalive连接在闲置超过一定的时间后(默认为75s),服务器和浏览器都会求关闭这个连接
+	keepalive_timeout  65;
+
+/*	
+ log_not_found指令
+
+语法: log_not_found on | off;
+默认值: log_not_found on;
+配置段: http, server, location
+是否在error_log中记录不存在的错误。默认是。
+*/
+	log_not_found off;
+	
+	#gzip  on;
+/*
+语法：lua_shared_dict <name> <size>
+ 
+该命令主要是定义一块名为name的共享内存空间，内存大小为size。通过该命令定义
+的共享内存对象对于Nginx中所有worker进程都是可见的，当Nginx通过reload命令重启
+时，共享内存字典项会从新获取它的内容，当时当Nginx退出时，字典项的值将会丢失。
+*/
+	lua_shared_dict cache 1m;
+//server配置块用来定义虚拟主机，每个server块就是一个虚拟主机，只处理与之相对应的主机域名请求
+	server {
+		listen       80;				//端口
+		server_name  localhost;			//IP
+
+		#charset koi8-r;
+
+		#access_log  logs/host.access.log  main;
+
+/*
+		文件路径的定义： 分别以root和alias的方式来设置资源路径
+		
+		//当/conf/nginx.conf请求会根据root path映射为 path/conf/nginx.conf 这里即为 /usr/local/nginx/conf/nginx.conf
+		location /conf {
+			root   /usr/local/nginx/;
+		}
+		
+		//使用alias的时候，在URI向实际文件路径的映射过程中，已经把location后配置的/conf这部分的字符串丢弃掉,
+		//所以, /conf/nginx.conf请求将根据 alias path 映射为 path/nginx.conf
+		//这个区别也是：root可以放置到http、server、location、if块中，而alias只能放置到location块中
+		location /conf {
+			alias   /usr/local/nginx/conf/;
+		}		
+*/		
+		
+		location / {
+			root   html;
+			index  index.html index.htm;
+		}
+
+		location /wxapp {
+			root   html;
+			index  index.html index.htm; 
+		}
+		
+		location /crm {
+			root   crm;
+			#index  index.html index.htm;
+		}
+		
+		location /resource {
+			root   html;
+			index  index.html index.htm;
+		}
+
+                location /index{
+                        root   html;
+                        index  index.html index.htm;
+                }
+		
+		location /favicon.ico {
+			content_by_lua_block {
+				ngx.say(os.date())
+			}
+		}
+		
+		location /app/api {
+			default_type 'text/json';
+			content_by_lua_file "lualib/ads/ads.lua";
+		}
+                location /crm/api {
+                        default_type 'text/json';
+                        client_max_body_size 25m;
+                        content_by_lua_file "lualib/ads/ads.lua";
+                }
+                location /goodscrm/api {
+                        default_type 'text/json';
+                         content_by_lua_file "lualib/ads/ads.lua";
+
+                }
+                location /logistics/api {
+                        default_type 'text/json';
+                         content_by_lua_file "lualib/ads/ads.lua";
+
+                }
+
+                location /proxy/ {
+                        default_type 'text/json';
+                        client_max_body_size 25m;
+                        content_by_lua_file "lualib/ads/proxy.lua";
+                }
+
+		
+		location /MP_verify_TP7sRfGIUO076IMe.txt {}	
+	}
+	
+	server {
+		//使用SSL协议
+		listen       443 ssl;
+		server_name  localhost;
+
+/*
+SSL 证书是一种数字证书，它使用 Secure Socket Layer 协议在浏览器和 Web 服务器之间建立一条安全通道，从而实现：
+1、数据信息在客户端和服务器之间的加密传输，保证双方传递信息的安全性，不可被第三方窃听；
+2、用户可以通过服务器证书验证他所访问的网站是否真实可靠。
+*/
+		ssl_certificate perm/213999878880543.pem;			//公钥(CA证书)
+		ssl_certificate_key perm/213999878880543.key; 		//私钥
+
+/*
+设置存储session参数的缓存的类型和大小。缓存可以是下面任何一种类型：
+
+off
+
+严格禁止使用会话缓存：nginx明确告知客户端会话不可重用。
+none
+
+会话缓存是不允许的：nginx告知客户端会话可以重用，但并没有在缓存中存储会话参数。
+builtin
+
+在OpenSSL中构建缓存；只能被一个工作进程使用。缓存的大小在会话中指定，如果没有指定大小，默认20480个会话。使用内置缓存会导致内存碎片化。
+shared
+
+缓存在所有工作进程之间共享。缓存大小按照字节为单位指定；1MB可以存储4000个会话。每块共享内存都应该起个名字。同一块缓存可以在多个虚拟服务中使用。
+两种类型的缓存可以同时使用：
+
+ssl_session_cache builtin:1000 shared:SSL:10m;
+
+但是，单独使用共享缓存会更有效。
+*/
+		ssl_session_cache    shared:SSL:1m;
+		ssl_session_timeout  5m;
+
+
+//	可以通过下面配置调整为优先使用RC4-SHA加密算法：
+
+		ssl_ciphers  HIGH:!aNULL:!MD5;
+		ssl_prefer_server_ciphers  on;
+	
+		#lua_code_cache off;
+		
+		location / {
+			root   html/crm;
+			index  index.html index.htm;
+		}
+		
+		location /wxapp {
+			root   html;
+			index  index.html index.htm;
+		}
+		
+		location /crm {
+			root   html;
+			index  index.html index.htm; 
+		}
+
+                location /resource {
+                        root   html;
+                        index  index.html index.htm;
+                }
+		
+                location /index{
+                        root   html;
+                        index  index.html index.htm;
+                }
+		location /favicon.ico {
+			content_by_lua_block {
+				ngx.say(os.date())
+			}
+		}
+		
+		location /MP_verify_TP7sRfGIUO076IMe.txt {}
+		
+		location /app/api {
+			default_type 'text/json';
+			content_by_lua_file "lualib/ads/ads.lua";
+		}
+		
+		location /crm/api {
+			default_type 'text/json';
+			client_max_body_size 25m;  
+			content_by_lua_file "lualib/ads/ads.lua";
+		}
+		location /goodscrm/api {
+			default_type 'text/json';
+			 content_by_lua_file "lualib/ads/ads.lua";
+
+		}
+                location /logistics/api {
+                        default_type 'text/json';
+                         content_by_lua_file "lualib/ads/ads.lua";
+
+                }
+
+		
+		location /proxy/ {
+			default_type 'text/json';
+			client_max_body_size 25m;
+			content_by_lua_file "lualib/ads/proxy.lua";
+		}
+	}
+}
